@@ -3,7 +3,16 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import { MainLayout } from "@/components/layout/MainLayout";
+import Dashboard from "./pages/Dashboard";
+import BanhoTosa from "./pages/BanhoTosa";
+import Hotelzinho from "./pages/Hotelzinho";
+import Planos from "./pages/Planos";
+import Clientes from "./pages/Clientes";
+import Inativos from "./pages/Inativos";
+import FrenteCaixa from "./pages/FrenteCaixa";
+import WhatsAppPanel from "./pages/WhatsAppPanel";
+import Importar from "./pages/Importar";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -14,11 +23,20 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <MainLayout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/banho-tosa" element={<BanhoTosa />} />
+            <Route path="/hotelzinho" element={<Hotelzinho />} />
+            <Route path="/planos" element={<Planos />} />
+            <Route path="/clientes" element={<Clientes />} />
+            <Route path="/inativos" element={<Inativos />} />
+            <Route path="/caixa" element={<FrenteCaixa />} />
+            <Route path="/whatsapp" element={<WhatsAppPanel />} />
+            <Route path="/importar" element={<Importar />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </MainLayout>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
