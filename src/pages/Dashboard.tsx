@@ -5,6 +5,7 @@ import { OperationalCard } from '@/components/dashboard/OperationalCard';
 import { RevenueCard } from '@/components/dashboard/RevenueCard';
 import { TodaySchedule } from '@/components/dashboard/TodaySchedule';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { ScheduledReservations } from '@/components/dashboard/ScheduledReservations';
 
 const Dashboard = () => {
   const data = useDashboardData();
@@ -105,6 +106,9 @@ const Dashboard = () => {
           ]}
         />
       </div>
+
+      {/* Scheduled Reservations */}
+      <ScheduledReservations />
 
       {/* Today's Schedule */}
       <TodaySchedule appointments={data.todayAppointments} />
