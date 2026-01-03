@@ -55,9 +55,23 @@ interface ClientDB {
   created_at: string | null;
 }
 
+interface PetDB {
+  id: string;
+  client_id: string;
+  name: string;
+  species: string;
+  breed: string | null;
+  size: string | null;
+  coat_type: string | null;
+  weight: number | null;
+  preferred_service: string | null;
+  grooming_type: string | null;
+  created_at: string | null;
+}
+
 const Clientes = () => {
   const [clients, setClients] = useState<ClientDB[]>([]);
-  const [pets, setPets] = useState<Pet[]>(mockPets);
+  const [pets, setPets] = useState<PetDB[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isClientDialogOpen, setIsClientDialogOpen] = useState(false);
   const [isPetDialogOpen, setIsPetDialogOpen] = useState(false);
@@ -85,13 +99,32 @@ const Clientes = () => {
     setClients(data || []);
   };
 
-  // Load clients on mount
+  // Fetch pets from database
+  const fetchPets = async () => {
+    const { data, error } = await supabase
+      .from('pets')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Erro ao carregar pets:', error);
+      return;
+    }
+    
+    setPets(data || []);
+  };
+
+  // Load clients and pets on mount
   useEffect(() => {
     fetchClients();
+    fetchPets();
   }, []);
 
   // Save client to database
   const handleSaveClient = async () => {
+    console.log("CLICK OK - handleSaveClient");
+    console.log("DADOS FORM", clientForm);
+    
     if (!clientForm.name || !clientForm.whatsapp) {
       toast({
         title: "Campos obrigatórios",
@@ -103,21 +136,24 @@ const Clientes = () => {
 
     setIsLoading(true);
     
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('clients')
       .insert({
         name: clientForm.name,
         whatsapp: clientForm.whatsapp,
         email: clientForm.email || null,
-      });
+      })
+      .select();
 
+    console.log("RESULTADO INSERT CLIENT", data, error);
+    
     setIsLoading(false);
 
     if (error) {
       console.error('Erro ao salvar cliente:', error);
       toast({
         title: "Erro ao cadastrar",
-        description: "Não foi possível salvar o cliente.",
+        description: error.message || "Não foi possível salvar o cliente.",
         variant: "destructive",
       });
       return;
@@ -177,7 +213,7 @@ const Clientes = () => {
     client.whatsapp.includes(searchTerm)
   );
 
-  const getClientPets = (clientId: string) => pets.filter(p => p.clientId === clientId);
+  const getClientPets = (clientId: string) => pets.filter(p => p.client_id === clientId);
 
   const resetPetForm = () => {
     setPetForm({
@@ -196,6 +232,9 @@ const Clientes = () => {
   };
 
   const handleSavePet = async () => {
+    console.log("CLICK OK - handleSavePet");
+    console.log("DADOS FORM PET", petForm);
+    
     // Validation
     if (!petForm.clientId || !petForm.name || !petForm.species || !petForm.breed || !petForm.size || !petForm.furType) {
       toast({
@@ -206,52 +245,45 @@ const Clientes = () => {
       return;
     }
 
-    const client = clients.find(c => c.id === petForm.clientId);
+    setIsLoading(true);
+
+    const { data, error } = await supabase
+      .from('pets')
+      .insert({
+        client_id: petForm.clientId,
+        name: petForm.name,
+        species: petForm.species,
+        breed: petForm.breed,
+        size: petForm.size,
+        coat_type: petForm.furType,
+        weight: petForm.weight ? parseFloat(petForm.weight) : null,
+        preferred_service: petForm.preferredService || null,
+        grooming_type: petForm.groomingType || null,
+      })
+      .select();
+
+    console.log("RESULTADO INSERT PET", data, error);
     
-    const newPet: Pet = {
-      id: String(Date.now()),
-      clientId: petForm.clientId,
-      name: petForm.name,
-      species: petForm.species as Species,
-      breed: petForm.breed,
-      size: petForm.size as PetSize,
-      furType: petForm.furType as FurType,
-      weight: petForm.weight ? parseFloat(petForm.weight) : undefined,
-      preferredService: petForm.preferredService as PreferredService || undefined,
-      groomingType: petForm.groomingType as GroomingType || undefined,
-    };
+    setIsLoading(false);
 
-    setPets(prev => [...prev, newPet]);
-
-    // Trigger webhook for new pet
-    await triggerWebhook('novo_pet', {
-      cliente: client?.name,
-      clienteWhatsapp: client?.whatsapp,
-      pet: newPet.name,
-      raca: newPet.breed,
-      porte: newPet.size,
-      tipoPelo: newPet.furType,
-      tipoServico: newPet.preferredService,
-      tipoTosa: newPet.groomingType,
-    });
-
-    // If service preferences were defined, trigger additional webhook
-    if (newPet.preferredService) {
-      await triggerWebhook('preferencia_servico_definida', {
-        cliente: client?.name,
-        pet: newPet.name,
-        tipoServico: newPet.preferredService,
-        tipoTosa: newPet.groomingType,
+    if (error) {
+      console.error('Erro ao salvar pet:', error);
+      toast({
+        title: "Erro ao cadastrar",
+        description: error.message || "Não foi possível salvar o pet.",
+        variant: "destructive",
       });
+      return;
     }
 
     toast({
       title: "Pet cadastrado!",
-      description: `${newPet.name} foi cadastrado com sucesso.`,
+      description: `${petForm.name} foi cadastrado com sucesso.`,
     });
 
     resetPetForm();
     setIsPetDialogOpen(false);
+    fetchPets();
   };
 
   return (
@@ -668,14 +700,14 @@ const Clientes = () => {
                               <span>{pet.species === 'cachorro' ? '🐕' : pet.species === 'gato' ? '🐈' : '🐾'}</span>
                               <span className="text-sm font-medium">{pet.name}</span>
                               <Badge variant="outline" className="text-xs">
-                                {sizeLabels[pet.size]}
+                                {pet.size ? sizeLabels[pet.size as PetSize] : 'N/A'}
                               </Badge>
                               <Badge variant="secondary" className="text-xs">
-                                {furTypeLabels[pet.furType]}
+                                {pet.coat_type ? furTypeLabels[pet.coat_type as FurType] : 'N/A'}
                               </Badge>
-                              {pet.preferredService && (
+                              {pet.preferred_service && (
                                 <Badge className="text-xs bg-primary/20 text-primary">
-                                  {pet.preferredService === 'banho_tosa' ? 'B+T' : 'Banho'}
+                                  {pet.preferred_service === 'banho_tosa' ? 'B+T' : 'Banho'}
                                 </Badge>
                               )}
                             </div>
