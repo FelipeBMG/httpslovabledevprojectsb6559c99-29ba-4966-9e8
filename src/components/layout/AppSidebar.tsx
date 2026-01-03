@@ -11,7 +11,8 @@ import {
   Dog,
   ChevronLeft,
   ChevronRight,
-  Bell
+  Bell,
+  Settings
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ const navItems = [
   { title: 'Frente de Caixa', url: '/caixa', icon: DollarSign },
   { title: 'WhatsApp', url: '/whatsapp', icon: MessageSquare },
   { title: 'Importar Dados', url: '/importar', icon: Upload },
+  { title: 'Tabela de Valores', url: '/tabela-valores', icon: Settings },
 ];
 
 export function AppSidebar() {
