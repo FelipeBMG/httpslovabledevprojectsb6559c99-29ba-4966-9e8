@@ -190,7 +190,7 @@ export const VaccineBooklet = ({ petId, petName }: VaccineBookletProps) => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Syringe className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-base">🩺 Caderneta de Saúde</h3>
+          <h3 className="font-semibold text-base">🩺 Carteirinha de Saúde</h3>
         </div>
         <Button
           size="sm"
