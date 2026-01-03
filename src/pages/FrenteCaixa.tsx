@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { DollarSign, Plus, Receipt, CreditCard, Banknote, Smartphone, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,29 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockClients, mockSales, mockPets } from '@/data/mockData';
-import { Sale, PaymentMethod, SaleType } from '@/types';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+
+type PaymentMethod = 'dinheiro' | 'pix' | 'credito' | 'debito';
+type SaleType = 'banho' | 'hotelzinho' | 'plano' | 'adicional';
+
+interface ClientDB {
+  id: string;
+  name: string;
+  whatsapp: string;
+  email: string | null;
+}
+
+interface Sale {
+  id: string;
+  clientId: string;
+  description: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  createdAt: string;
+}
 
 const paymentMethods: { value: PaymentMethod; label: string; icon: typeof DollarSign }[] = [
   { value: 'dinheiro', label: 'Dinheiro', icon: Banknote },
@@ -29,7 +47,13 @@ const saleTypes: { value: SaleType; label: string }[] = [
 
 const FrenteCaixa = () => {
   const { toast } = useToast();
-  const [sales] = useState<Sale[]>(mockSales);
+  
+  // State from database
+  const [clients, setClients] = useState<ClientDB[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Form state
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedType, setSelectedType] = useState<SaleType>('banho');
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('pix');
@@ -37,12 +61,35 @@ const FrenteCaixa = () => {
   const [description, setDescription] = useState('');
   const [issueNF, setIssueNF] = useState(false);
 
+  // Fetch clients from Supabase
+  const fetchClients = async () => {
+    console.log("Fetching clients...");
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('name', { ascending: true });
+    
+    if (error) {
+      console.error('Erro ao carregar clientes:', error);
+      return;
+    }
+    console.log("Clients loaded:", data);
+    setClients(data || []);
+  };
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
   const todaySales = sales.filter(s => 
     new Date(s.createdAt).toDateString() === new Date().toDateString()
   );
   const todayTotal = todaySales.reduce((acc, s) => acc + s.amount, 0);
 
-  const handleRegisterSale = () => {
+  const handleRegisterSale = async () => {
+    console.log("CLICK OK - handleRegisterSale");
+    console.log("DADOS FORM", { selectedClient, selectedType, amount, description, selectedPayment, issueNF });
+
     if (!selectedClient || !amount) {
       toast({
         title: "Campos obrigatórios",
@@ -52,9 +99,26 @@ const FrenteCaixa = () => {
       return;
     }
 
+    setIsLoading(true);
+
+    // Add to local sales (simulating - you can create a sales table in Supabase later)
+    const newSale: Sale = {
+      id: String(Date.now()),
+      clientId: selectedClient,
+      description: description || `${saleTypes.find(t => t.value === selectedType)?.label}`,
+      amount: parseFloat(amount),
+      paymentMethod: selectedPayment,
+      createdAt: new Date().toISOString(),
+    };
+
+    setSales(prev => [newSale, ...prev]);
+
+    setIsLoading(false);
+
+    const client = clients.find(c => c.id === selectedClient);
     toast({
       title: "✅ Venda Registrada!",
-      description: `Webhook disparado para o n8n. ${issueNF ? 'NF-e será preparada.' : ''}`,
+      description: `Venda de R$ ${parseFloat(amount).toFixed(2)} para ${client?.name}. ${issueNF ? 'NF-e será preparada.' : ''}`,
     });
 
     // Reset form
@@ -64,7 +128,7 @@ const FrenteCaixa = () => {
     setIssueNF(false);
   };
 
-  const getClient = (clientId: string) => mockClients.find(c => c.id === clientId);
+  const getClient = (clientId: string) => clients.find(c => c.id === clientId);
 
   return (
     <div className="p-8">
@@ -105,13 +169,13 @@ const FrenteCaixa = () => {
             <CardContent className="space-y-6">
               {/* Client Selection */}
               <div>
-                <Label>Cliente</Label>
+                <Label>Cliente *</Label>
                 <Select value={selectedClient} onValueChange={setSelectedClient}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o cliente" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockClients.map(client => (
+                    {clients.map(client => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.name} - {client.whatsapp}
                       </SelectItem>
@@ -146,7 +210,7 @@ const FrenteCaixa = () => {
 
               {/* Amount */}
               <div>
-                <Label>Valor (R$)</Label>
+                <Label>Valor (R$) *</Label>
                 <Input 
                   type="number"
                   placeholder="0,00"
@@ -207,9 +271,10 @@ const FrenteCaixa = () => {
               <Button 
                 className="w-full h-14 text-lg bg-gradient-success hover:opacity-90"
                 onClick={handleRegisterSale}
+                disabled={isLoading}
               >
                 <Check className="w-5 h-5 mr-2" />
-                Registrar Venda
+                {isLoading ? 'Registrando...' : 'Registrar Venda'}
                 {amount && ` - R$ ${parseFloat(amount).toFixed(2)}`}
               </Button>
             </CardContent>
@@ -243,31 +308,37 @@ const FrenteCaixa = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {sales.slice(0, 5).map((sale, index) => {
-                  const client = getClient(sale.clientId);
-                  return (
-                    <motion.div
-                      key={sale.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                    >
-                      <div>
-                        <p className="font-medium text-sm">{sale.description}</p>
-                        <p className="text-xs text-muted-foreground">{client?.name}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-primary">
-                          R$ {sale.amount.toFixed(2)}
-                        </p>
-                        <p className="text-xs text-muted-foreground capitalize">
-                          {sale.paymentMethod}
-                        </p>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                {sales.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhuma venda registrada ainda
+                  </p>
+                ) : (
+                  sales.slice(0, 5).map((sale, index) => {
+                    const client = getClient(sale.clientId);
+                    return (
+                      <motion.div
+                        key={sale.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div>
+                          <p className="font-medium text-sm">{sale.description}</p>
+                          <p className="text-xs text-muted-foreground">{client?.name}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-primary">
+                            R$ {sale.amount.toFixed(2)}
+                          </p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {sale.paymentMethod}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
               </div>
             </CardContent>
           </Card>
