@@ -128,7 +128,7 @@ export const mockPets: Pet[] = [
     species: 'gato',
     breed: 'Persa',
     size: 'medio',
-    furType: 'muito_peludo',
+    furType: 'longo',
     weight: 4.5,
     preferredService: 'banho',
   },

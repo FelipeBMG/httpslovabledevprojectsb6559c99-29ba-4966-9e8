@@ -10,7 +10,7 @@ export interface Client {
 }
 
 // Pet types
-export type FurType = 'curto' | 'medio' | 'longo' | 'muito_peludo';
+export type FurType = 'curto' | 'medio' | 'longo';
 export type Species = 'cachorro' | 'gato' | 'outro';
 export type PetSize = 'pequeno' | 'medio' | 'grande';
 export type PreferredService = 'banho' | 'banho_tosa';

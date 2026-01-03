@@ -17,10 +17,9 @@ import { addMonths, addDays, format } from 'date-fns';
 import { VaccineBooklet } from '@/components/pets/VaccineBooklet';
 
 const furTypeLabels: Record<FurType, string> = {
-  curto: 'Curto',
-  medio: 'Médio',
-  longo: 'Longo',
-  muito_peludo: 'Muito Peludo',
+  curto: 'Pelo curto',
+  medio: 'Pelo médio',
+  longo: 'Pelo longo',
 };
 
 const sizeLabels: Record<PetSize, string> = {
@@ -496,7 +495,7 @@ const Clientes = () => {
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="dados">Dados do Pet</TabsTrigger>
                     <TabsTrigger value="servicos">Serviços</TabsTrigger>
-                    <TabsTrigger value="caderneta">🩺 Caderneta</TabsTrigger>
+                    <TabsTrigger value="caderneta">🩺 Carteirinha</TabsTrigger>
                   </TabsList>
                   
                   {/* Tab: Dados do Pet */}
@@ -604,10 +603,9 @@ const Clientes = () => {
                             <SelectValue placeholder="Tipo de pelo" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="curto">Curto</SelectItem>
-                            <SelectItem value="medio">Médio</SelectItem>
-                            <SelectItem value="longo">Longo</SelectItem>
-                            <SelectItem value="muito_peludo">Muito Peludo</SelectItem>
+                            <SelectItem value="curto">Pelo curto</SelectItem>
+                            <SelectItem value="medio">Pelo médio</SelectItem>
+                            <SelectItem value="longo">Pelo longo</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -912,14 +910,9 @@ const Clientes = () => {
                           ))}
                         </div>
                         
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        <Button variant="ghost" size="icon" className="text-destructive">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   </motion.div>
