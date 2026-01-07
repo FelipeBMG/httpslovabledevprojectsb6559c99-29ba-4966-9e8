@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Plus, Search, Phone, Mail, Dog, Cat, Edit, Trash2, Scissors, Droplets, MapPin, Truck, Loader2 } from 'lucide-react';
+import { Users, Plus, Search, Phone, Mail, Dog, Cat, Edit, Trash2, Scissors, Droplets, MapPin, Truck, Loader2, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { addMonths, addDays, format } from 'date-fns';
 import { VaccineBooklet } from '@/components/pets/VaccineBooklet';
 import { lookupCep, formatCep } from '@/lib/cepLookup';
+import { ClientBillingDialog } from '@/components/clients/ClientBillingDialog';
 
 const furTypeLabels: Record<FurType, string> = {
   curto: 'Pelo curto',
@@ -103,6 +104,7 @@ const Clientes = () => {
   const [isPetDialogOpen, setIsPetDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editingPetId, setEditingPetId] = useState<string | null>(null);
+  const [billingClient, setBillingClient] = useState<{ id: string; name: string } | null>(null);
   
   // Client form state
   const [clientForm, setClientForm] = useState({
@@ -1338,6 +1340,19 @@ const Clientes = () => {
                           ))}
                         </div>
                         
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="text-green-600 border-green-200 hover:bg-green-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBillingClient({ id: client.id, name: client.name });
+                          }}
+                        >
+                          <TrendingUp className="w-4 h-4 mr-1" />
+                          Faturamento
+                        </Button>
+                        
                         <Button variant="ghost" size="icon" className="text-destructive">
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -1350,6 +1365,14 @@ const Clientes = () => {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Client Billing Dialog */}
+      <ClientBillingDialog
+        open={!!billingClient}
+        onOpenChange={(open) => !open && setBillingClient(null)}
+        clientId={billingClient?.id || ''}
+        clientName={billingClient?.name || ''}
+      />
     </div>
   );
 };
