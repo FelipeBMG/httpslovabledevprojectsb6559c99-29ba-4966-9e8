@@ -14,7 +14,8 @@ import {
   Bell,
   Settings,
   ClipboardList,
-  Car
+  Car,
+  TrendingUp
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,7 @@ const navItems = [
   { title: 'Lembretes', url: '/lembretes', icon: Bell },
   { title: 'Inativos', url: '/inativos', icon: UserX },
   { title: 'Frente de Caixa', url: '/caixa', icon: DollarSign },
+  { title: 'Faturamento', url: '/faturamento', icon: TrendingUp },
   { title: 'WhatsApp', url: '/whatsapp', icon: MessageSquare },
   { title: 'Importar Dados', url: '/importar', icon: Upload },
   { title: 'Tabela de Valores', url: '/tabela-valores', icon: Settings },
