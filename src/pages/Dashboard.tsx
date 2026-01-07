@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfMonth, endOfMonth, startOfDay, endOfDay, format, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { GoogleAuthButton } from '@/components/GoogleAuthButton';
 
 interface DashboardData {
   // Hoje
@@ -207,17 +206,12 @@ const Dashboard = () => {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">
-              Dashboard
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              {format(today, "EEEE, dd 'de' MMMM", { locale: ptBR })}
-            </p>
-          </div>
-          <GoogleAuthButton />
-        </div>
+        <h1 className="text-3xl font-display font-bold text-foreground">
+          Dashboard
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          {format(today, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+        </p>
       </motion.div>
 
       {/* Alert for pending payments */}
