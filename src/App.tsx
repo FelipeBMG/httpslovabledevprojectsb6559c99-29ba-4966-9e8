@@ -17,6 +17,7 @@ import Importar from "./pages/Importar";
 import TabelaValores from "./pages/TabelaValores";
 import ServicosDoDia from "./pages/ServicosDoDia";
 import RotaDoDia from "./pages/RotaDoDia";
+import Faturamento from "./pages/Faturamento";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/tabela-valores" element={<TabelaValores />} />
             <Route path="/servicos-do-dia" element={<ServicosDoDia />} />
             <Route path="/rota-do-dia" element={<RotaDoDia />} />
+            <Route path="/faturamento" element={<Faturamento />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </MainLayout>
