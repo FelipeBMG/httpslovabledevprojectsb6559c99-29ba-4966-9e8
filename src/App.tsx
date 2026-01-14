@@ -19,9 +19,12 @@ import ServicosDoDia from "./pages/ServicosDoDia";
 import RotaDoDia from "./pages/RotaDoDia";
 import Faturamento from "./pages/Faturamento";
 import Estoque from "./pages/Estoque";
-import ConfiguracoesFiscais from "./pages/ConfiguracoesFiscais";
-import NotasFiscais from "./pages/NotasFiscais";
 import NotFound from "./pages/NotFound";
+
+// Feature flags - Fiscal module is DISABLED
+// ConfiguracoesFiscais and NotasFiscais are removed from routes
+// A emissão de documentos fiscais para clientes finais é de responsabilidade 
+// do pet shop e não faz parte deste plano no momento.
 
 const queryClient = new QueryClient();
 
@@ -48,8 +51,9 @@ const App = () => (
             <Route path="/rota-do-dia" element={<RotaDoDia />} />
             <Route path="/faturamento" element={<Faturamento />} />
             <Route path="/estoque" element={<Estoque />} />
-            <Route path="/config-fiscal" element={<ConfiguracoesFiscais />} />
-            <Route path="/notas-fiscais" element={<NotasFiscais />} />
+            {/* Fiscal routes DISABLED via feature flag */}
+            {/* <Route path="/config-fiscal" element={<ConfiguracoesFiscais />} /> */}
+            {/* <Route path="/notas-fiscais" element={<NotasFiscais />} /> */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </MainLayout>
