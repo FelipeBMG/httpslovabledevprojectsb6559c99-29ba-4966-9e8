@@ -16,17 +16,17 @@ import {
   ClipboardList,
   Car,
   TrendingUp,
-  Package,
-  FileText,
-  Receipt
+  Package
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { featureFlags } from '@/lib/featureFlags';
 
-const navItems = [
+// Base navigation items (always visible)
+const baseNavItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Banho & Tosa', url: '/banho-tosa', icon: Scissors },
   { title: 'Serviços do Dia', url: '/servicos-do-dia', icon: ClipboardList },
@@ -39,12 +39,14 @@ const navItems = [
   { title: 'Inativos', url: '/inativos', icon: UserX },
   { title: 'Frente de Caixa', url: '/caixa', icon: DollarSign },
   { title: 'Faturamento', url: '/faturamento', icon: TrendingUp },
-  { title: 'Notas Fiscais', url: '/notas-fiscais', icon: Receipt },
-  { title: 'Config. Fiscal', url: '/config-fiscal', icon: FileText },
   { title: 'WhatsApp', url: '/whatsapp', icon: MessageSquare },
   { title: 'Importar Dados', url: '/importar', icon: Upload },
   { title: 'Tabela de Valores', url: '/tabela-valores', icon: Settings },
 ];
+
+// Build navigation items based on feature flags
+// Fiscal module items are DISABLED via feature flag
+const navItems = baseNavItems;
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);

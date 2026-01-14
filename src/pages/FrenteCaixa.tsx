@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { DollarSign, Plus, Receipt, CreditCard, Banknote, Smartphone, Check, Gift, Trash2, Hotel, Scissors, Package, AlertCircle, Clock, ShoppingBag } from 'lucide-react';
+import { DollarSign, Plus, CreditCard, Banknote, Smartphone, Check, Gift, Trash2, Hotel, Scissors, Package, AlertCircle, Clock, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+// Switch removed - fiscal module disabled
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
@@ -185,7 +185,8 @@ const FrenteCaixa = () => {
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedPetId, setSelectedPetId] = useState('');
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('pix');
-  const [issueNF, setIssueNF] = useState(false);
+  // Fiscal module DISABLED - issueNF always false
+  const issueNF = false; // Feature flag: FISCAL_MODULE_ENABLED = false
   
   // Invoice items
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
@@ -737,7 +738,7 @@ const FrenteCaixa = () => {
       setSelectedClient('');
       setSelectedPetId('');
       setInvoiceItems([]);
-      setIssueNF(false);
+      // issueNF is always false (fiscal module disabled)
       
       // Refresh data from database to update UI immediately
       await Promise.all([
@@ -1205,19 +1206,9 @@ const FrenteCaixa = () => {
                   </div>
                 </div>
 
-                {/* NF-e Toggle */}
-                <div className="flex items-center justify-between p-4 bg-muted rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <Receipt className="w-5 h-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">Emitir NF-e</p>
-                      <p className="text-sm text-muted-foreground">
-                        Preparar dados para nota fiscal
-                      </p>
-                    </div>
-                  </div>
-                  <Switch checked={issueNF} onCheckedChange={setIssueNF} />
-                </div>
+                {/* NF-e Toggle - DISABLED via feature flag */}
+                {/* A emissão de documentos fiscais para clientes finais é de 
+                    responsabilidade do pet shop e não faz parte deste plano no momento. */}
 
                 {/* Finalize Button */}
                 <Button 
