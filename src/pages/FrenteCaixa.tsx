@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { DollarSign, Plus, CreditCard, Banknote, Smartphone, Check, Gift, Trash2, Hotel, Scissors, Package, AlertCircle, Clock, ShoppingBag } from 'lucide-react';
+import { DollarSign, Plus, CreditCard, Banknote, Smartphone, Check, Gift, Trash2, Hotel, Scissors, Package, AlertCircle, Clock, ShoppingBag, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,9 +15,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { differenceInDays, format } from 'date-fns';
 import { ProductSelector } from '@/components/pos/ProductSelector';
+import { PaymentConfirmationDialog, PaymentStatusBadge } from '@/components/pos/PaymentConfirmationDialog';
 
 type PaymentMethod = 'dinheiro' | 'pix' | 'credito' | 'debito';
-type PaymentStatus = 'pendente' | 'pago' | 'isento';
+type PaymentStatus = 'pendente' | 'confirmado' | 'pago' | 'isento';
 
 interface ClientDB {
   id: string;
@@ -180,6 +181,22 @@ const FrenteCaixa = () => {
   
   // Pending payments list
   const [pendingPayments, setPendingPayments] = useState<PendingPaymentItem[]>([]);
+  
+  // Payment confirmation dialog state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    type: 'invoice' | 'quickPay';
+    item?: PendingPaymentItem;
+    amount: number;
+    clientName: string;
+    description: string;
+  } | null>(null);
+  const [confirmedPayments, setConfirmedPayments] = useState<Map<string, {
+    confirmedAmount: number;
+    paymentMethod: PaymentMethod;
+    confirmedAt: string;
+    notes?: string;
+  }>>(new Map());
   
   // Form state
   const [selectedClient, setSelectedClient] = useState('');
@@ -600,8 +617,14 @@ const FrenteCaixa = () => {
     new Date(s.createdAt).toDateString() === new Date().toDateString()
   );
   const todayTotal = todaySales.reduce((acc, s) => acc + s.amount, 0);
+  
+  // Count confirmed vs pending payments in today's sales
+  const confirmedTodayTotal = todaySales
+    .filter(s => confirmedPayments.has(s.id) || s.amount > 0)
+    .reduce((acc, s) => acc + s.amount, 0);
 
-  const handleFinalizeSale = async () => {
+  // Open payment confirmation dialog for invoice
+  const handleOpenPaymentConfirmation = () => {
     if (!selectedClient || invoiceItems.length === 0) {
       toast({
         title: "Campos obrigatórios",
@@ -611,22 +634,80 @@ const FrenteCaixa = () => {
       return;
     }
 
+    const client = clients.find(c => c.id === selectedClient);
+    const pet = pets.find(p => p.id === selectedPetId);
+    const itemDescriptions = invoiceItems.map(item => item.description).join(', ');
+
+    setPendingConfirmation({
+      type: 'invoice',
+      amount: totalToPay,
+      clientName: client?.name || 'Cliente',
+      description: pet ? `${pet.name}: ${itemDescriptions}` : itemDescriptions,
+    });
+    setConfirmDialogOpen(true);
+  };
+
+  // Open payment confirmation dialog for quick pay
+  const handleOpenQuickPayConfirmation = (item: PendingPaymentItem) => {
+    if (!item.sourceId) {
+      toast({
+        title: "Erro: Registro não encontrado",
+        description: "Registro financeiro não encontrado para este serviço.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPendingConfirmation({
+      type: 'quickPay',
+      item,
+      amount: item.price,
+      clientName: item.clientName,
+      description: `${item.petName}: ${item.description}`,
+    });
+    setConfirmDialogOpen(true);
+  };
+
+  // Handle confirmed payment from dialog
+  const handlePaymentConfirmed = async (confirmedAmount: number, paymentMethod: PaymentMethod, notes?: string) => {
+    if (!pendingConfirmation) return;
+
+    setConfirmDialogOpen(false);
+
+    if (pendingConfirmation.type === 'invoice') {
+      await executeFinalizeSale(confirmedAmount, paymentMethod, notes);
+    } else if (pendingConfirmation.item) {
+      await executeQuickPay(pendingConfirmation.item, confirmedAmount, paymentMethod, notes);
+    }
+
+    setPendingConfirmation(null);
+  };
+
+  // Cancel payment confirmation
+  const handleCancelConfirmation = () => {
+    setConfirmDialogOpen(false);
+    setPendingConfirmation(null);
+  };
+
+  const executeFinalizeSale = async (confirmedAmount: number, paymentMethod: PaymentMethod, notes?: string) => {
+    if (!selectedClient || invoiceItems.length === 0) return;
+
     setIsLoading(true);
 
     try {
       const now = new Date().toISOString();
 
-      // 1. Update appointments - mark payment as PAID
+      // 1. Update appointments - mark payment as PAID with confirmed payment method
       const appointmentItems = invoiceItems.filter(item => item.type === 'banho_tosa' && item.sourceId);
       for (const item of appointmentItems) {
-        const paymentStatus = item.coveredByPlan ? 'isento' : 'pago';
+        const itemPaymentStatus = item.coveredByPlan ? 'isento' : 'pago';
         
         const { error: aptError } = await supabase
           .from('bath_grooming_appointments')
           .update({ 
             status: 'finalizado',
-            payment_status: paymentStatus,
-            payment_method: item.coveredByPlan ? null : selectedPayment,
+            payment_status: itemPaymentStatus,
+            payment_method: item.coveredByPlan ? null : paymentMethod,
             paid_at: now,
           } as any)
           .eq('id', item.sourceId);
@@ -658,7 +739,7 @@ const FrenteCaixa = () => {
         }
       }
 
-      // 2. Update hotel stays - mark as PAID
+      // 2. Update hotel stays - mark as PAID with confirmed payment method
       const hotelItems = invoiceItems.filter(item => item.type === 'hotel' && item.sourceId);
       for (const item of hotelItems) {
         const { error: hotelError } = await supabase
@@ -666,7 +747,7 @@ const FrenteCaixa = () => {
           .update({ 
             status: 'check_out',
             payment_status: 'pago',
-            payment_method: selectedPayment,
+            payment_method: paymentMethod,
             paid_at: now,
           } as any)
           .eq('id', item.sourceId);
@@ -680,7 +761,6 @@ const FrenteCaixa = () => {
       // 3. Update stock for products sold
       const productItems = invoiceItems.filter(item => item.type === 'produto' && item.productId && item.controlStock);
       for (const item of productItems) {
-        // Deduct stock
         const { data: product } = await (supabase as any).from('products')
           .select('stock_quantity')
           .eq('id', item.productId)
@@ -692,7 +772,6 @@ const FrenteCaixa = () => {
             .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
             .eq('id', item.productId);
           
-          // Record movement
           await (supabase as any).from('stock_movements')
             .insert({
               product_id: item.productId,
@@ -709,36 +788,44 @@ const FrenteCaixa = () => {
         .update({ last_purchase: now })
         .eq('id', selectedClient);
 
-      // 4. Create sale record (local state for now)
+      // 5. Create sale record with CONFIRMED amount
       const client = clients.find(c => c.id === selectedClient);
       const pet = pets.find(p => p.id === selectedPetId);
       const itemDescriptions = invoiceItems.map(item => item.description).join(', ');
       
+      const saleId = String(Date.now());
       const newSale: Sale = {
-        id: String(Date.now()),
+        id: saleId,
         clientId: selectedClient,
-        description: `${pet?.name}: ${itemDescriptions}`,
-        amount: totalToPay,
-        paymentMethod: selectedPayment,
+        description: `${pet?.name}: ${itemDescriptions}${notes ? ` (${notes})` : ''}`,
+        amount: confirmedAmount, // Use confirmed amount from dialog
+        paymentMethod: paymentMethod, // Use confirmed payment method
         createdAt: now,
       };
 
       setSales(prev => [newSale, ...prev]);
+
+      // Track as confirmed payment
+      setConfirmedPayments(prev => new Map(prev).set(saleId, {
+        confirmedAmount,
+        paymentMethod,
+        confirmedAt: now,
+        notes,
+      }));
 
       const planMessage = itemsCoveredByPlan.length > 0 
         ? ` (${itemsCoveredByPlan.length} serviço(s) coberto(s) pelo plano)` 
         : '';
 
       toast({
-        title: "✅ Pagamento Registrado!",
-        description: `Cobrança de R$ ${totalToPay.toFixed(2)} para ${client?.name}.${planMessage}`,
+        title: "✅ Pagamento Confirmado!",
+        description: `Cobrança de R$ ${confirmedAmount.toFixed(2)} via ${paymentMethods.find(m => m.value === paymentMethod)?.label} para ${client?.name}.${planMessage}`,
       });
 
       // Reset form
       setSelectedClient('');
       setSelectedPetId('');
       setInvoiceItems([]);
-      // issueNF is always false (fiscal module disabled)
       
       // Refresh data from database to update UI immediately
       await Promise.all([
@@ -759,24 +846,15 @@ const FrenteCaixa = () => {
     }
   };
 
-  // Quick pay a single pending item
-  const handleQuickPay = async (item: PendingPaymentItem) => {
-    // VALIDATE: Check if sourceId exists
-    if (!item.sourceId) {
-      toast({
-        title: "Erro: Registro não encontrado",
-        description: "Registro financeiro não encontrado para este serviço. Finalize o serviço novamente.",
-        variant: "destructive",
-      });
-      return;
-    }
+  // Execute quick pay with confirmed amount
+  const executeQuickPay = async (item: PendingPaymentItem, confirmedAmount: number, paymentMethod: PaymentMethod, notes?: string) => {
+    if (!item.sourceId) return;
 
     setIsLoading(true);
     try {
       const now = new Date().toISOString();
 
       if (item.type === 'banho_tosa') {
-        // First verify the record exists
         const { data: existing, error: checkError } = await supabase
           .from('bath_grooming_appointments')
           .select('id, status')
@@ -784,7 +862,6 @@ const FrenteCaixa = () => {
           .maybeSingle();
 
         if (checkError || !existing) {
-          console.error('Record not found:', checkError);
           throw new Error('Registro financeiro não encontrado para este serviço.');
         }
 
@@ -793,17 +870,14 @@ const FrenteCaixa = () => {
           .update({ 
             status: 'finalizado',
             payment_status: 'pago',
-            payment_method: selectedPayment,
+            payment_method: paymentMethod,
             paid_at: now,
+            price: confirmedAmount, // Update with confirmed amount
           } as any)
           .eq('id', item.sourceId);
 
-        if (error) {
-          console.error('Error updating appointment:', error);
-          throw error;
-        }
+        if (error) throw error;
       } else {
-        // First verify the record exists
         const { data: existing, error: checkError } = await supabase
           .from('hotel_stays')
           .select('id, status')
@@ -811,7 +885,6 @@ const FrenteCaixa = () => {
           .maybeSingle();
 
         if (checkError || !existing) {
-          console.error('Record not found:', checkError);
           throw new Error('Registro financeiro não encontrado para este serviço.');
         }
 
@@ -820,15 +893,13 @@ const FrenteCaixa = () => {
           .update({ 
             status: 'check_out',
             payment_status: 'pago',
-            payment_method: selectedPayment,
+            payment_method: paymentMethod,
             paid_at: now,
+            total_price: confirmedAmount, // Update with confirmed amount
           } as any)
           .eq('id', item.sourceId);
 
-        if (error) {
-          console.error('Error updating hotel stay:', error);
-          throw error;
-        }
+        if (error) throw error;
       }
 
       // Update client
@@ -837,23 +908,32 @@ const FrenteCaixa = () => {
         .update({ last_purchase: now })
         .eq('id', item.clientId);
 
-      // Add to sales
+      // Add to sales with confirmed amount
+      const saleId = String(Date.now());
       const newSale: Sale = {
-        id: String(Date.now()),
+        id: saleId,
         clientId: item.clientId,
-        description: `${item.petName}: ${item.description}`,
-        amount: item.price,
-        paymentMethod: selectedPayment,
+        description: `${item.petName}: ${item.description}${notes ? ` (${notes})` : ''}`,
+        amount: confirmedAmount,
+        paymentMethod: paymentMethod,
         createdAt: now,
       };
       setSales(prev => [newSale, ...prev]);
 
+      // Track confirmed payment
+      setConfirmedPayments(prev => new Map(prev).set(saleId, {
+        confirmedAmount,
+        paymentMethod,
+        confirmedAt: now,
+        notes,
+      }));
+
       toast({
-        title: "✅ Pagamento Registrado!",
-        description: `${item.description} - R$ ${item.price.toFixed(2)}`,
+        title: "✅ Pagamento Confirmado!",
+        description: `${item.description} - R$ ${confirmedAmount.toFixed(2)} via ${paymentMethods.find(m => m.value === paymentMethod)?.label}`,
       });
 
-      // Refresh data immediately after payment
+      // Refresh data
       await Promise.all([
         fetchAppointments(),
         fetchHotelStays(),
@@ -862,7 +942,7 @@ const FrenteCaixa = () => {
       console.error('Quick pay error:', error);
       toast({
         title: "Erro ao registrar pagamento",
-        description: error?.message || "Registro financeiro não encontrado para este serviço. Finalize o serviço novamente.",
+        description: error?.message || "Registro financeiro não encontrado para este serviço.",
         variant: "destructive",
       });
     } finally {
@@ -1210,14 +1290,14 @@ const FrenteCaixa = () => {
                 {/* A emissão de documentos fiscais para clientes finais é de 
                     responsabilidade do pet shop e não faz parte deste plano no momento. */}
 
-                {/* Finalize Button */}
+                {/* Finalize Button - Opens confirmation dialog */}
                 <Button 
                   className="w-full h-14 text-lg bg-gradient-success hover:opacity-90"
-                  onClick={handleFinalizeSale}
+                  onClick={handleOpenPaymentConfirmation}
                   disabled={isLoading}
                 >
-                  <Check className="w-5 h-5 mr-2" />
-                  {isLoading ? 'Registrando...' : `Registrar Pagamento - R$ ${totalToPay.toFixed(2)}`}
+                  <CheckCircle2 className="w-5 h-5 mr-2" />
+                  {isLoading ? 'Processando...' : `Confirmar Pagamento - R$ ${totalToPay.toFixed(2)}`}
                 </Button>
               </CardContent>
             </Card>
@@ -1276,12 +1356,12 @@ const FrenteCaixa = () => {
                         </span>
                         <Button
                           size="sm"
-                          onClick={() => handleQuickPay(item)}
+                          onClick={() => handleOpenQuickPayConfirmation(item)}
                           disabled={isLoading}
                           className="bg-green-600 hover:bg-green-700"
                         >
-                          <Check className="w-4 h-4 mr-1" />
-                          Pagar
+                          <CheckCircle2 className="w-4 h-4 mr-1" />
+                          Confirmar
                         </Button>
                       </div>
                     </motion.div>
@@ -1383,20 +1463,35 @@ const FrenteCaixa = () => {
                 ) : (
                   sales.slice(0, 5).map((sale, index) => {
                     const client = getClient(sale.clientId);
+                    const isConfirmed = confirmedPayments.has(sale.id);
+                    const confirmInfo = confirmedPayments.get(sale.id);
                     return (
                       <motion.div
                         key={sale.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: index * 0.1 }}
-                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                        className={cn(
+                          "flex items-center justify-between p-3 rounded-lg border",
+                          isConfirmed
+                            ? "bg-green-50 border-green-200"
+                            : "bg-muted/50 border-transparent"
+                        )}
                       >
-                        <div>
-                          <p className="font-medium text-sm truncate max-w-[150px]">{sale.description}</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm truncate max-w-[130px]">{sale.description}</p>
+                            {isConfirmed && (
+                              <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">{client?.name}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-primary">
+                        <div className="text-right flex-shrink-0">
+                          <p className={cn(
+                            "font-bold",
+                            isConfirmed ? "text-green-600" : "text-primary"
+                          )}>
                             R$ {sale.amount.toFixed(2)}
                           </p>
                           <p className="text-xs text-muted-foreground capitalize">
@@ -1412,6 +1507,18 @@ const FrenteCaixa = () => {
           </Card>
         </motion.div>
       </div>
+
+      {/* Payment Confirmation Dialog */}
+      <PaymentConfirmationDialog
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        amount={pendingConfirmation?.amount || 0}
+        paymentMethod={selectedPayment}
+        clientName={pendingConfirmation?.clientName || ''}
+        description={pendingConfirmation?.description || ''}
+        onConfirm={handlePaymentConfirmed}
+        onCancel={handleCancelConfirmation}
+      />
     </div>
   );
 };
