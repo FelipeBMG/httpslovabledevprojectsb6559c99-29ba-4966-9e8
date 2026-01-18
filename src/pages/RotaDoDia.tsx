@@ -1,14 +1,11 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Clock, Phone, Car, User, Dog, Pencil, Navigation, ExternalLink } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { MapPin, Clock, Phone, Car, User, Dog } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import ClientEditDialog from '@/components/rota/ClientEditDialog';
 
 interface PetDB {
   id: string;
@@ -53,13 +50,6 @@ interface RouteItem {
   client_id: string;
   client_name: string;
   client_whatsapp: string;
-  client_address: string;
-  client_address_number: string;
-  client_address_complement: string;
-  client_neighborhood: string;
-  client_city: string;
-  client_state: string;
-  client_zip_code: string;
   service_type: string;
   service_id: string;
 }
@@ -68,8 +58,8 @@ const RotaDoDia = () => {
   const [pickupPets, setPickupPets] = useState<RouteItem[]>([]);
   const [deliveryPets, setDeliveryPets] = useState<RouteItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingClient, setEditingClient] = useState<RouteItem | null>(null);
 
+  // Data de hoje no timezone local (Brasil -3)
   const today = format(new Date(), 'yyyy-MM-dd');
 
   useEffect(() => {
@@ -79,6 +69,7 @@ const RotaDoDia = () => {
   const fetchRoutePets = async () => {
     setLoading(true);
 
+    // Buscar agendamentos do dia com rota_buscar ou rota_entregar = true
     const [petsRes, clientsRes, appointmentsRes] = await Promise.all([
       supabase.from('pets').select('*'),
       supabase.from('clients').select('*'),
@@ -98,8 +89,11 @@ const RotaDoDia = () => {
     const pickupList: RouteItem[] = [];
     const deliveryList: RouteItem[] = [];
 
+    // Monta endereço completo
     const buildFullAddress = (pet: PetDB, client: ClientDB): string => {
       const parts: string[] = [];
+      
+      // Prioriza endereço do pet, senão usa do cliente
       const address = pet.address || client.address;
       const neighborhood = pet.neighborhood || client.neighborhood;
       const zipCode = pet.zip_code || client.zip_code;
@@ -125,6 +119,7 @@ const RotaDoDia = () => {
       return parts.join(' • ') || 'Endereço não informado';
     };
 
+    // Filtrar por rota_buscar e rota_entregar
     appointments.forEach(apt => {
       const pet = getPet(apt.pet_id);
       const client = getClient(apt.client_id);
@@ -139,26 +134,28 @@ const RotaDoDia = () => {
         client_id: client.id,
         client_name: client.name,
         client_whatsapp: client.whatsapp || '',
-        client_address: client.address || '',
-        client_address_number: client.address_number || '',
-        client_address_complement: client.address_complement || '',
-        client_neighborhood: client.neighborhood || '',
-        client_city: client.city || '',
-        client_state: client.state || '',
-        client_zip_code: client.zip_code || '',
         service_type: apt.service_type === 'banho' ? 'Banho' : 'Banho + Tosa',
         service_id: apt.id,
       };
 
+      // Se rota_buscar = true, adiciona na lista de buscar
       if (apt.rota_buscar === true) {
-        pickupList.push({ ...baseItem, time: pet.pickup_time || null });
+        pickupList.push({
+          ...baseItem,
+          time: pet.pickup_time || null,
+        });
       }
 
+      // Se rota_entregar = true, adiciona na lista de entregar
       if (apt.rota_entregar === true) {
-        deliveryList.push({ ...baseItem, time: pet.delivery_time || null });
+        deliveryList.push({
+          ...baseItem,
+          time: pet.delivery_time || null,
+        });
       }
     });
 
+    // Ordenar por horário
     pickupList.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
     deliveryList.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 
@@ -167,19 +164,12 @@ const RotaDoDia = () => {
     setLoading(false);
   };
 
-  const openGoogleMaps = (address: string) => {
-    const encoded = encodeURIComponent(address);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encoded}`, '_blank');
-  };
-
   const RouteCard = ({ item, type }: { item: RouteItem; type: 'pickup' | 'delivery' }) => {
     return (
       <motion.div
-        layout
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 20 }}
-        className="p-4 border rounded-xl bg-card hover:shadow-md transition-all group"
+        className="p-4 border rounded-xl bg-card hover:shadow-md transition-shadow"
       >
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -195,48 +185,13 @@ const RotaDoDia = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">{item.service_type}</Badge>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => setEditingClient(item)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Editar cliente</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
+          <Badge variant="outline">{item.service_type}</Badge>
         </div>
         
         <div className="mt-3 space-y-2">
-          {/* Endereço com botão de navegação */}
-          <div className="flex items-start gap-2 text-sm group/address">
+          <div className="flex items-start gap-2 text-sm">
             <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <span className="text-foreground">{item.full_address}</span>
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-0 group-hover/address:opacity-100 transition-opacity"
-                    onClick={() => openGoogleMaps(item.full_address)}
-                  >
-                    <Navigation className="w-3 h-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Abrir no Google Maps</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <span className="text-foreground">{item.full_address}</span>
           </div>
           
           {item.time && (
@@ -247,18 +202,15 @@ const RotaDoDia = () => {
           )}
           
           {item.client_whatsapp && (
-            <div className="flex items-center justify-between">
-              <a 
-                href={`https://wa.me/55${item.client_whatsapp.replace(/\D/g, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm text-green-600 hover:underline"
-              >
-                <Phone className="w-4 h-4" />
-                {item.client_whatsapp}
-                <ExternalLink className="w-3 h-3 ml-1" />
-              </a>
-            </div>
+            <a 
+              href={`https://wa.me/55${item.client_whatsapp.replace(/\D/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-sm text-green-600 hover:underline"
+            >
+              <Phone className="w-4 h-4" />
+              {item.client_whatsapp}
+            </a>
           )}
         </div>
       </motion.div>
@@ -301,11 +253,9 @@ const RotaDoDia = () => {
                 Nenhum pet para buscar hoje
               </p>
             ) : (
-              <AnimatePresence>
-                {pickupPets.map((item) => (
-                  <RouteCard key={`pickup-${item.service_id}`} item={item} type="pickup" />
-                ))}
-              </AnimatePresence>
+              pickupPets.map((item) => (
+                <RouteCard key={`pickup-${item.service_id}`} item={item} type="pickup" />
+              ))
             )}
           </CardContent>
         </Card>
@@ -328,36 +278,13 @@ const RotaDoDia = () => {
                 Nenhum pet para entregar hoje
               </p>
             ) : (
-              <AnimatePresence>
-                {deliveryPets.map((item) => (
-                  <RouteCard key={`delivery-${item.service_id}`} item={item} type="delivery" />
-                ))}
-              </AnimatePresence>
+              deliveryPets.map((item) => (
+                <RouteCard key={`delivery-${item.service_id}`} item={item} type="delivery" />
+              ))
             )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Dialog de edição */}
-      {editingClient && (
-        <ClientEditDialog
-          open={!!editingClient}
-          onOpenChange={(open) => !open && setEditingClient(null)}
-          client={{
-            id: editingClient.client_id,
-            name: editingClient.client_name,
-            whatsapp: editingClient.client_whatsapp,
-            address: editingClient.client_address,
-            address_number: editingClient.client_address_number,
-            address_complement: editingClient.client_address_complement,
-            neighborhood: editingClient.client_neighborhood,
-            city: editingClient.client_city,
-            state: editingClient.client_state,
-            zip_code: editingClient.client_zip_code,
-          }}
-          onSave={fetchRoutePets}
-        />
-      )}
     </div>
   );
 };
