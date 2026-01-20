@@ -155,6 +155,22 @@ const BanhoTosa = () => {
   const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
   const [basePrice, setBasePrice] = useState<number>(0);
   const [addonsTotal, setAddonsTotal] = useState<number>(0);
+  const [taxiDogPrice, setTaxiDogPrice] = useState<number>(0);
+
+  // Get Táxi Dog addon based on logistics option
+  const getTaxiDogAddon = (responsavel: string) => {
+    if (responsavel === 'tutor_traxidog') {
+      // TraxiDog só entrega
+      return serviceAddons.find(a => a.name.toLowerCase().includes('entregar') && !a.name.toLowerCase().includes('buscar'));
+    } else if (responsavel === 'traxidog_tutor') {
+      // TraxiDog só busca
+      return serviceAddons.find(a => a.name.toLowerCase().includes('buscar') && !a.name.toLowerCase().includes('entregar'));
+    } else if (responsavel === 'traxidog_traxidog') {
+      // TraxiDog busca e entrega
+      return serviceAddons.find(a => a.name.toLowerCase().includes('buscar') && a.name.toLowerCase().includes('entregar'));
+    }
+    return null;
+  };
 
   const fetchClients = async () => {
     const { data, error } = await supabase
@@ -326,23 +342,39 @@ const BanhoTosa = () => {
     }
   }, [formData.petId, formData.service, formData.size, formData.coatType, pets, servicePrices]);
 
-  // Calculate addons total
+  // Calculate addons total (excluding Táxi Dog - it's calculated separately)
   useEffect(() => {
-    const total = formData.selectedAddons.reduce((acc, addonId) => {
-      const addon = serviceAddons.find(a => a.id === addonId);
-      return acc + (addon?.price || 0);
-    }, 0);
+    const taxiDogAddonIds = serviceAddons
+      .filter(a => a.name.toLowerCase().includes('táxi') || a.name.toLowerCase().includes('taxi'))
+      .map(a => a.id);
+    
+    const total = formData.selectedAddons
+      .filter(addonId => !taxiDogAddonIds.includes(addonId))
+      .reduce((acc, addonId) => {
+        const addon = serviceAddons.find(a => a.id === addonId);
+        return acc + (addon?.price || 0);
+      }, 0);
     setAddonsTotal(total);
   }, [formData.selectedAddons, serviceAddons]);
+
+  // Calculate Táxi Dog price based on logistics option
+  useEffect(() => {
+    const taxiAddon = getTaxiDogAddon(formData.responsavel);
+    if (taxiAddon) {
+      setTaxiDogPrice(taxiAddon.price);
+    } else {
+      setTaxiDogPrice(0);
+    }
+  }, [formData.responsavel, serviceAddons]);
 
   // Update calculated price
   useEffect(() => {
     if (basePrice > 0) {
-      setCalculatedPrice(basePrice + addonsTotal);
+      setCalculatedPrice(basePrice + addonsTotal + taxiDogPrice);
     } else {
       setCalculatedPrice(null);
     }
-  }, [basePrice, addonsTotal]);
+  }, [basePrice, addonsTotal, taxiDogPrice]);
 
   const toggleAddon = (addonId: string) => {
     setFormData(prev => ({
@@ -801,32 +833,40 @@ const BanhoTosa = () => {
                   />
                 </div>
 
-                {/* Addons Section */}
-                {serviceAddons.length > 0 && (
+                {/* Addons Section - Exclude Táxi Dog (managed by logistics) */}
+                {serviceAddons.filter(a => 
+                  !a.name.toLowerCase().includes('táxi') && 
+                  !a.name.toLowerCase().includes('taxi')
+                ).length > 0 && (
                   <div>
                     <Label className="mb-2 block">Serviços Adicionais</Label>
                     <div className="grid grid-cols-2 gap-2">
-                      {serviceAddons.map(addon => (
-                        <div 
-                          key={addon.id}
-                          className={cn(
-                            "flex items-center gap-2 p-2 border rounded-lg cursor-pointer transition-colors",
-                            formData.selectedAddons.includes(addon.id) 
-                              ? "border-primary bg-primary/10" 
-                              : "border-border hover:border-primary/50"
-                          )}
-                          onClick={() => toggleAddon(addon.id)}
-                        >
-                          <Checkbox 
-                            checked={formData.selectedAddons.includes(addon.id)}
-                            onCheckedChange={() => toggleAddon(addon.id)}
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">{addon.name}</p>
-                            <p className="text-xs text-muted-foreground">R$ {addon.price.toFixed(2)}</p>
+                      {serviceAddons
+                        .filter(addon => 
+                          !addon.name.toLowerCase().includes('táxi') && 
+                          !addon.name.toLowerCase().includes('taxi')
+                        )
+                        .map(addon => (
+                          <div 
+                            key={addon.id}
+                            className={cn(
+                              "flex items-center gap-2 p-2 border rounded-lg cursor-pointer transition-colors",
+                              formData.selectedAddons.includes(addon.id) 
+                                ? "border-primary bg-primary/10" 
+                                : "border-border hover:border-primary/50"
+                            )}
+                            onClick={() => toggleAddon(addon.id)}
+                          >
+                            <Checkbox 
+                              checked={formData.selectedAddons.includes(addon.id)}
+                              onCheckedChange={() => toggleAddon(addon.id)}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{addon.name}</p>
+                              <p className="text-xs text-muted-foreground">R$ {addon.price.toFixed(2)}</p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   </div>
                 )}
@@ -835,15 +875,27 @@ const BanhoTosa = () => {
                 {calculatedPrice !== null && (
                   <Card className="bg-primary/5 border-primary/20">
                     <CardContent className="p-4">
-                      <div className="flex justify-between items-center">
-                        <div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
                           <p className="text-sm text-muted-foreground">Valor do Serviço</p>
                           <p className="font-medium">R$ {basePrice.toFixed(2)}</p>
                         </div>
                         {addonsTotal > 0 && (
-                          <div className="text-right">
+                          <div className="flex justify-between items-center">
                             <p className="text-sm text-muted-foreground">Adicionais</p>
                             <p className="font-medium">+ R$ {addonsTotal.toFixed(2)}</p>
+                          </div>
+                        )}
+                        {taxiDogPrice > 0 && (
+                          <div className="flex justify-between items-center">
+                            <p className="text-sm text-muted-foreground">
+                              Táxi Dog ({formData.responsavel === 'tutor_traxidog' 
+                                ? 'Entregar' 
+                                : formData.responsavel === 'traxidog_tutor' 
+                                  ? 'Buscar' 
+                                  : 'Buscar + Entregar'})
+                            </p>
+                            <p className="font-medium text-accent-foreground">+ R$ {taxiDogPrice.toFixed(2)}</p>
                           </div>
                         )}
                       </div>
