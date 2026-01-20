@@ -3,7 +3,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import BanhoTosa from "./pages/BanhoTosa";
 import HotelCreche from "./pages/HotelCreche";
@@ -20,11 +23,12 @@ import RotaDoDia from "./pages/RotaDoDia";
 import Faturamento from "./pages/Faturamento";
 import Estoque from "./pages/Estoque";
 import NotFound from "./pages/NotFound";
-
-// Feature flags - Fiscal module is DISABLED
-// ConfiguracoesFiscais and NotasFiscais are removed from routes
-// A emissão de documentos fiscais para clientes finais é de responsabilidade 
-// do pet shop e não faz parte deste plano no momento.
+import Auth from "./pages/Auth";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminData from "./pages/admin/AdminData";
+import AdminConfig from "./pages/admin/AdminConfig";
+import AdminActions from "./pages/admin/AdminActions";
 
 const queryClient = new QueryClient();
 
@@ -34,29 +38,57 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <MainLayout>
+        <AuthProvider>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/banho-tosa" element={<BanhoTosa />} />
-            <Route path="/hotel-creche" element={<HotelCreche />} />
-            <Route path="/planos" element={<Planos />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/lembretes" element={<Lembretes />} />
-            <Route path="/inativos" element={<Inativos />} />
-            <Route path="/caixa" element={<FrenteCaixa />} />
-            <Route path="/whatsapp" element={<WhatsAppPanel />} />
-            <Route path="/importar" element={<Importar />} />
-            <Route path="/tabela-valores" element={<TabelaValores />} />
-            <Route path="/servicos-do-dia" element={<ServicosDoDia />} />
-            <Route path="/rota-do-dia" element={<RotaDoDia />} />
-            <Route path="/faturamento" element={<Faturamento />} />
-            <Route path="/estoque" element={<Estoque />} />
-            {/* Fiscal routes DISABLED via feature flag */}
-            {/* <Route path="/config-fiscal" element={<ConfiguracoesFiscais />} /> */}
-            {/* <Route path="/notas-fiscais" element={<NotasFiscais />} /> */}
+            {/* Auth Route */}
+            <Route path="/auth" element={<Auth />} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin" element={
+              <ProtectedRoute requireAdmin>
+                <AdminLayout><AdminDashboard /></AdminLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/usuarios" element={
+              <ProtectedRoute requireAdmin>
+                <AdminLayout><AdminUsers /></AdminLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/dados" element={
+              <ProtectedRoute requireAdmin>
+                <AdminLayout><AdminData /></AdminLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/config" element={
+              <ProtectedRoute requireAdmin>
+                <AdminLayout><AdminConfig /></AdminLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/acoes" element={
+              <ProtectedRoute requireAdmin>
+                <AdminLayout><AdminActions /></AdminLayout>
+              </ProtectedRoute>
+            } />
+            
+            {/* Main App Routes */}
+            <Route path="/" element={<MainLayout><Dashboard /></MainLayout>} />
+            <Route path="/banho-tosa" element={<MainLayout><BanhoTosa /></MainLayout>} />
+            <Route path="/hotel-creche" element={<MainLayout><HotelCreche /></MainLayout>} />
+            <Route path="/planos" element={<MainLayout><Planos /></MainLayout>} />
+            <Route path="/clientes" element={<MainLayout><Clientes /></MainLayout>} />
+            <Route path="/lembretes" element={<MainLayout><Lembretes /></MainLayout>} />
+            <Route path="/inativos" element={<MainLayout><Inativos /></MainLayout>} />
+            <Route path="/caixa" element={<MainLayout><FrenteCaixa /></MainLayout>} />
+            <Route path="/whatsapp" element={<MainLayout><WhatsAppPanel /></MainLayout>} />
+            <Route path="/importar" element={<MainLayout><Importar /></MainLayout>} />
+            <Route path="/tabela-valores" element={<MainLayout><TabelaValores /></MainLayout>} />
+            <Route path="/servicos-do-dia" element={<MainLayout><ServicosDoDia /></MainLayout>} />
+            <Route path="/rota-do-dia" element={<MainLayout><RotaDoDia /></MainLayout>} />
+            <Route path="/faturamento" element={<MainLayout><Faturamento /></MainLayout>} />
+            <Route path="/estoque" element={<MainLayout><Estoque /></MainLayout>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </MainLayout>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

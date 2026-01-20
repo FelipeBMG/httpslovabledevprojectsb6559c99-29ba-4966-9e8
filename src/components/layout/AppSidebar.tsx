@@ -16,14 +16,14 @@ import {
   ClipboardList,
   Car,
   TrendingUp,
-  Package
+  Shield
 } from 'lucide-react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { featureFlags } from '@/lib/featureFlags';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Base navigation items (always visible)
 const baseNavItems = [
@@ -43,13 +43,11 @@ const baseNavItems = [
   { title: 'Tabela de Valores', url: '/tabela-valores', icon: Settings },
 ];
 
-// Build navigation items based on feature flags
-// Fiscal module items are DISABLED via feature flag
-const navItems = baseNavItems;
-
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   return (
     <motion.aside
@@ -88,7 +86,7 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex-1 py-4 overflow-y-auto">
         <ul className="space-y-1 px-3">
-          {navItems.map((item) => {
+          {baseNavItems.map((item) => {
             const isActive = location.pathname === item.url;
             const Icon = item.icon;
             
@@ -135,8 +133,24 @@ export function AppSidebar() {
         </ul>
       </nav>
 
-      {/* Collapse Toggle */}
-      <div className="p-3 border-t border-sidebar-border">
+      {/* Admin Link + Collapse Toggle */}
+      <div className="p-3 border-t border-sidebar-border space-y-2">
+        {/* Control Room - Admin Only */}
+        {isAdmin && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/admin')}
+            className={cn(
+              "w-full bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent border border-sidebar-border",
+              collapsed ? "justify-center" : "justify-start"
+            )}
+          >
+            <Shield className="w-5 h-5 text-blue-400" />
+            {!collapsed && <span className="ml-3 font-medium">Control Room</span>}
+          </Button>
+        )}
+        
         <Button
           variant="ghost"
           size="sm"
