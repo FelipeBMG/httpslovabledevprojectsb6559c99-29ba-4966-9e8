@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Phone, Car, User, Dog } from 'lucide-react';
+import { MapPin, Clock, Phone, Car, User, Dog, Sun, Sunset, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+type PeriodFilter = 'all' | 'morning' | 'afternoon';
 
 interface PetDB {
   id: string;
@@ -54,9 +57,27 @@ interface RouteItem {
   service_id: string;
 }
 
+// Determina período padrão baseado na hora atual
+const getDefaultPeriod = (): PeriodFilter => {
+  const currentHour = new Date().getHours();
+  return currentHour < 12 ? 'morning' : 'afternoon';
+};
+
+// Verifica se um horário pertence ao período
+const isInPeriod = (time: string | null, period: PeriodFilter): boolean => {
+  if (!time) return true; // Se não tem horário, mostra em todos
+  if (period === 'all') return true;
+  
+  const [hours] = time.split(':').map(Number);
+  if (period === 'morning') return hours < 12;
+  if (period === 'afternoon') return hours >= 12;
+  return true;
+};
+
 const RotaDoDia = () => {
-  const [pickupPets, setPickupPets] = useState<RouteItem[]>([]);
-  const [deliveryPets, setDeliveryPets] = useState<RouteItem[]>([]);
+  const [allPickupPets, setAllPickupPets] = useState<RouteItem[]>([]);
+  const [allDeliveryPets, setAllDeliveryPets] = useState<RouteItem[]>([]);
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(getDefaultPeriod());
   const [loading, setLoading] = useState(true);
 
   // Data de hoje no timezone local (Brasil -3)
@@ -65,6 +86,17 @@ const RotaDoDia = () => {
   useEffect(() => {
     fetchRoutePets();
   }, []);
+
+  // Filtra pets baseado no período selecionado
+  const pickupPets = useMemo(() => 
+    allPickupPets.filter(item => isInPeriod(item.time, periodFilter)),
+    [allPickupPets, periodFilter]
+  );
+
+  const deliveryPets = useMemo(() => 
+    allDeliveryPets.filter(item => isInPeriod(item.time, periodFilter)),
+    [allDeliveryPets, periodFilter]
+  );
 
   const fetchRoutePets = async () => {
     setLoading(true);
@@ -159,9 +191,17 @@ const RotaDoDia = () => {
     pickupList.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
     deliveryList.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 
-    setPickupPets(pickupList);
-    setDeliveryPets(deliveryList);
+    setAllPickupPets(pickupList);
+    setAllDeliveryPets(deliveryList);
     setLoading(false);
+  };
+
+  const getPeriodLabel = () => {
+    switch (periodFilter) {
+      case 'morning': return 'Manhã (00:00 - 11:59)';
+      case 'afternoon': return 'Tarde (12:00 - 23:59)';
+      default: return 'Dia Inteiro';
+    }
   };
 
   const RouteCard = ({ item, type }: { item: RouteItem; type: 'pickup' | 'delivery' }) => {
@@ -223,7 +263,7 @@ const RotaDoDia = () => {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        className="mb-6"
       >
         <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-3">
           <Car className="w-8 h-8 text-primary" />
@@ -232,6 +272,52 @@ const RotaDoDia = () => {
         <p className="text-muted-foreground mt-1">
           {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
         </p>
+      </motion.div>
+
+      {/* Filtro de Período */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="mb-6"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">Visualizar:</span>
+          <ToggleGroup 
+            type="single" 
+            value={periodFilter} 
+            onValueChange={(value) => value && setPeriodFilter(value as PeriodFilter)}
+            className="justify-start"
+          >
+            <ToggleGroupItem 
+              value="all" 
+              aria-label="Dia Inteiro"
+              className="gap-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            >
+              <Calendar className="w-4 h-4" />
+              Dia Inteiro
+            </ToggleGroupItem>
+            <ToggleGroupItem 
+              value="morning" 
+              aria-label="Manhã"
+              className="gap-2 data-[state=on]:bg-amber-500 data-[state=on]:text-white"
+            >
+              <Sun className="w-4 h-4" />
+              Manhã
+            </ToggleGroupItem>
+            <ToggleGroupItem 
+              value="afternoon" 
+              aria-label="Tarde"
+              className="gap-2 data-[state=on]:bg-orange-500 data-[state=on]:text-white"
+            >
+              <Sunset className="w-4 h-4" />
+              Tarde
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Badge variant="outline" className="ml-auto">
+            {getPeriodLabel()}
+          </Badge>
+        </div>
       </motion.div>
 
       <div className="grid md:grid-cols-2 gap-6">
