@@ -522,34 +522,6 @@ const FrenteCaixa = () => {
           )}
         </div>
 
-        {/* Payment Method Quick Select */}
-        <Card className="border-0 shadow-soft">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Forma padrão:</span>
-              <div className="flex gap-2">
-                {paymentMethods.map(method => {
-                  const Icon = method.icon;
-                  return (
-                    <button
-                      key={method.value}
-                      onClick={() => setSelectedPayment(method.value)}
-                      className={cn(
-                        "px-3 py-2 rounded-lg border-2 flex items-center gap-2 transition-all text-sm",
-                        selectedPayment === method.value
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "border-border hover:border-primary/30 text-muted-foreground"
-                      )}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {method.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* TODAY Tab */}
         <TabsContent value="hoje" className="space-y-4">
