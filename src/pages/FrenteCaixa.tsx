@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { DollarSign, CreditCard, Banknote, Smartphone, Check, Trash2, Hotel, Scissors, Package, AlertCircle, Clock, CheckCircle2, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { DollarSign, CreditCard, Banknote, Smartphone, Check, Trash2, Hotel, Scissors, Package, AlertCircle, Clock, CheckCircle2, Calendar, ChevronLeft, ChevronRight, Car, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +46,14 @@ interface AppointmentDB {
   data_cobranca?: string | null;
   optional_services?: string[] | null;
   is_plan_usage?: boolean | null;
+  rota_buscar?: boolean | null;
+  rota_entregar?: boolean | null;
+}
+
+interface ServiceAddonDB {
+  id: string;
+  name: string;
+  price: number;
 }
 
 interface HotelStayDB {
@@ -78,6 +86,10 @@ interface PendingPaymentItem {
   time: string;
   sourceId: string;
   isPaid: boolean;
+  // Extended details for display
+  optionalServices?: string[] | null;
+  rotaBuscar?: boolean | null;
+  rotaEntregar?: boolean | null;
 }
 
 const paymentMethods: { value: PaymentMethod; label: string; icon: typeof DollarSign }[] = [
@@ -112,6 +124,7 @@ const FrenteCaixa = () => {
   const [pets, setPets] = useState<PetDB[]>([]);
   const [appointments, setAppointments] = useState<AppointmentDB[]>([]);
   const [hotelStays, setHotelStays] = useState<HotelStayDB[]>([]);
+  const [serviceAddons, setServiceAddons] = useState<ServiceAddonDB[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
   // Active tab
@@ -131,17 +144,19 @@ const FrenteCaixa = () => {
 
   // Fetch data from Supabase
   const fetchData = async () => {
-    const [clientsRes, petsRes, appointmentsRes, hotelRes] = await Promise.all([
+    const [clientsRes, petsRes, appointmentsRes, hotelRes, addonsRes] = await Promise.all([
       supabase.from('clients').select('id, name, whatsapp').order('name'),
       supabase.from('pets').select('id, client_id, name, species, breed').order('name'),
       supabase.from('bath_grooming_appointments').select('*').neq('status', 'cancelado'),
       supabase.from('hotel_stays').select('*').neq('status', 'cancelado'),
+      supabase.from('service_addons').select('id, name, price').eq('active', true),
     ]);
 
     if (!clientsRes.error) setClients(clientsRes.data || []);
     if (!petsRes.error) setPets(petsRes.data || []);
     if (!appointmentsRes.error) setAppointments(appointmentsRes.data || []);
     if (!hotelRes.error) setHotelStays(hotelRes.data || []);
+    if (!addonsRes.error) setServiceAddons(addonsRes.data || []);
   };
 
   useEffect(() => {
@@ -188,6 +203,9 @@ const FrenteCaixa = () => {
         time: format(new Date(apt.start_datetime), 'HH:mm'),
         sourceId: apt.id,
         isPaid,
+        optionalServices: apt.optional_services,
+        rotaBuscar: apt.rota_buscar,
+        rotaEntregar: apt.rota_entregar,
       });
     }
 
@@ -333,96 +351,183 @@ const FrenteCaixa = () => {
     }
   };
 
+  // Helper to get addons names
+  const getAddonNames = (item: PendingPaymentItem) => {
+    if (!item.optionalServices || item.optionalServices.length === 0) return [];
+    return item.optionalServices
+      .map(addonId => serviceAddons.find(a => a.id === addonId))
+      .filter(addon => addon && !addon.name.toLowerCase().includes('táxi'))
+      .map(addon => addon!);
+  };
+
+  // Helper to get logistics label
+  const getLogisticsLabel = (item: PendingPaymentItem) => {
+    const buscar = item.rotaBuscar;
+    const entregar = item.rotaEntregar;
+    
+    if (buscar && entregar) return { label: 'Táxi Dog - Buscar e Entregar', isTaxi: true };
+    if (buscar) return { label: 'Táxi Dog - Buscar', isTaxi: true };
+    if (entregar) return { label: 'Táxi Dog - Entregar', isTaxi: true };
+    return { label: 'Tutor', isTaxi: false };
+  };
+
+  // Helper to get Táxi Dog addon price
+  const getTaxiDogPrice = (item: PendingPaymentItem) => {
+    const buscar = item.rotaBuscar;
+    const entregar = item.rotaEntregar;
+    
+    if (buscar && entregar) {
+      return serviceAddons.find(a => a.name.includes('Buscar') && a.name.includes('Entregar'))?.price || 35;
+    }
+    if (buscar) {
+      return serviceAddons.find(a => a.name.includes('Buscar') && !a.name.includes('Entregar'))?.price || 20;
+    }
+    if (entregar) {
+      return serviceAddons.find(a => a.name.includes('Entregar') && !a.name.includes('Buscar'))?.price || 20;
+    }
+    return 0;
+  };
+
   // Render payment item row
-  const renderPaymentItem = (item: PendingPaymentItem, isEarlyPayment: boolean = false) => (
-    <motion.div
-      key={item.id}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn(
-        "flex items-center justify-between p-4 rounded-xl border transition-all",
-        item.isPaid
-          ? "bg-green-50 border-green-200 opacity-70"
-          : item.serviceStatus === 'finalizado'
-            ? "bg-red-50 border-red-300"
-            : "bg-card border-border hover:border-primary/30"
-      )}
-    >
-      {/* Left: Info */}
-      <div className="flex items-center gap-4 flex-1 min-w-0">
-        {/* Icon */}
-        <div className={cn(
-          "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
-          item.type === 'banho_tosa' ? "bg-primary/10" : "bg-orange-100"
-        )}>
-          {item.type === 'banho_tosa' ? (
-            <Scissors className="w-5 h-5 text-primary" />
-          ) : (
-            <Hotel className="w-5 h-5 text-orange-500" />
-          )}
-        </div>
-
-        {/* Details */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground truncate">{item.clientName}</span>
-            <span className="text-muted-foreground">•</span>
-            <span className="text-muted-foreground truncate">{item.petName}</span>
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-sm text-muted-foreground">{item.description}</span>
-            <Badge variant="outline" className="text-xs">
-              {item.time}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="text-xs">
-              {statusLabels[item.serviceStatus] || item.serviceStatus}
-            </Badge>
-            {item.isPaid ? (
-              <Badge className="text-xs bg-green-100 text-green-700 border-0">
-                <Check className="w-3 h-3 mr-1" />
-                {item.paymentStatus === 'pago_antecipado' ? 'Pago Antecipado' : 'Pago'}
-              </Badge>
-            ) : (
-              <Badge variant="destructive" className="text-xs">
-                <Clock className="w-3 h-3 mr-1" />
-                Pendente
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Right: Price & Action */}
-      <div className="flex items-center gap-4 flex-shrink-0">
-        <div className="text-right">
-          <p className={cn(
-            "text-lg font-bold",
-            item.isPaid ? "text-green-600" : "text-foreground"
-          )}>
-            R$ {item.price.toFixed(2)}
-          </p>
-        </div>
-
-        {!item.isPaid && (
-          <Button
-            onClick={() => handleOpenPayment(item, isEarlyPayment)}
-            disabled={isLoading}
-            className={cn(
-              "gap-2",
-              isEarlyPayment 
-                ? "bg-orange-500 hover:bg-orange-600" 
-                : "bg-green-600 hover:bg-green-700"
-            )}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {isEarlyPayment ? 'Antecipar' : 'Receber'}
-          </Button>
+  const renderPaymentItem = (item: PendingPaymentItem, isEarlyPayment: boolean = false) => {
+    const addons = item.type === 'banho_tosa' ? getAddonNames(item) : [];
+    const logistics = item.type === 'banho_tosa' ? getLogisticsLabel(item) : null;
+    const taxiDogPrice = item.type === 'banho_tosa' && logistics?.isTaxi ? getTaxiDogPrice(item) : 0;
+    
+    return (
+      <motion.div
+        key={item.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "p-4 rounded-xl border transition-all",
+          item.isPaid
+            ? "bg-green-50 border-green-200 opacity-70"
+            : item.serviceStatus === 'finalizado'
+              ? "bg-red-50 border-red-300"
+              : "bg-card border-border hover:border-primary/30"
         )}
-      </div>
-    </motion.div>
-  );
+      >
+        {/* Left: Info */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4 flex-1 min-w-0">
+            {/* Icon */}
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+              item.type === 'banho_tosa' ? "bg-primary/10" : "bg-orange-100"
+            )}>
+              {item.type === 'banho_tosa' ? (
+                <Scissors className="w-5 h-5 text-primary" />
+              ) : (
+                <Hotel className="w-5 h-5 text-orange-500" />
+              )}
+            </div>
+
+            {/* Details */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-foreground truncate">{item.clientName}</span>
+                <span className="text-muted-foreground">•</span>
+                <span className="text-muted-foreground truncate">{item.petName}</span>
+              </div>
+              
+              {/* Service breakdown */}
+              <div className="mt-2 space-y-1 text-sm">
+                {/* Main Service */}
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {item.time}
+                  </Badge>
+                  <span className="text-foreground font-medium">{item.description}</span>
+                </div>
+                
+                {/* Addons list */}
+                {addons.length > 0 && (
+                  <div className="pl-0.5">
+                    <span className="text-xs text-muted-foreground">Adicionais:</span>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {addons.map(addon => (
+                        <span 
+                          key={addon.id}
+                          className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded"
+                        >
+                          {addon.name} (R$ {addon.price.toFixed(2)})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Logistics / Arrival */}
+                {logistics && (
+                  <div className="flex items-center gap-2 pl-0.5">
+                    <span className="text-xs text-muted-foreground">Chegada:</span>
+                    <span className={cn(
+                      "text-xs px-1.5 py-0.5 rounded",
+                      logistics.isTaxi 
+                        ? "bg-orange-100 text-orange-800" 
+                        : "bg-slate-100 text-slate-700"
+                    )}>
+                      {logistics.isTaxi && <Car className="w-3 h-3 inline mr-1" />}
+                      {logistics.label}
+                      {logistics.isTaxi && taxiDogPrice > 0 && ` (R$ ${taxiDogPrice.toFixed(2)})`}
+                    </span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Status badges */}
+              <div className="flex items-center gap-2 mt-2">
+                <Badge variant="outline" className="text-xs">
+                  {statusLabels[item.serviceStatus] || item.serviceStatus}
+                </Badge>
+                {item.isPaid ? (
+                  <Badge className="text-xs bg-green-100 text-green-700 border-0">
+                    <Check className="w-3 h-3 mr-1" />
+                    {item.paymentStatus === 'pago_antecipado' ? 'Pago Antecipado' : 'Pago'}
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive" className="text-xs">
+                    <Clock className="w-3 h-3 mr-1" />
+                    Pendente
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Price & Action */}
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <div className="text-right">
+              <p className={cn(
+                "text-lg font-bold",
+                item.isPaid ? "text-green-600" : "text-foreground"
+              )}>
+                R$ {item.price.toFixed(2)}
+              </p>
+              <p className="text-xs text-muted-foreground">Total</p>
+            </div>
+
+            {!item.isPaid && (
+              <Button
+                onClick={() => handleOpenPayment(item, isEarlyPayment)}
+                disabled={isLoading}
+                className={cn(
+                  "gap-2",
+                  isEarlyPayment 
+                    ? "bg-orange-500 hover:bg-orange-600" 
+                    : "bg-green-600 hover:bg-green-700"
+                )}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {isEarlyPayment ? 'Antecipar' : 'Receber'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
 
   // Render empty state
   const renderEmptyState = (message: string) => (
