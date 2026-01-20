@@ -41,6 +41,8 @@ interface Appointment {
   is_plan_usage?: boolean | null;
   kanban_status?: string | null;
   payment_status?: string | null;
+  rota_buscar?: boolean | null;
+  rota_entregar?: boolean | null;
 }
 
 interface Client {
@@ -73,11 +75,11 @@ const KANBAN_COLUMNS: { key: KanbanStatus; label: string; icon: string; color: s
   { key: 'concluido', label: 'Concluído', icon: '✅', color: 'bg-green-50 border-green-300' },
 ];
 
-const LOGISTICS_LABELS: Record<string, { label: string; color: string }> = {
-  tutor_tutor: { label: 'Tutor Leva/Busca', color: 'bg-blue-500' },
-  tutor_empresa: { label: 'Tutor Leva/Emp Busca', color: 'bg-yellow-500' },
-  empresa_tutor: { label: 'Emp Leva/Tutor Busca', color: 'bg-purple-500' },
-  empresa_empresa: { label: 'Emp Leva/Busca', color: 'bg-orange-500' },
+const LOGISTICS_LABELS: Record<string, { label: string; color: string; icon: string }> = {
+  tutor: { label: 'Tutor', color: 'bg-slate-500', icon: '🧑' },
+  buscar: { label: 'Táxi Dog - Buscar', color: 'bg-yellow-500', icon: '🚗' },
+  entregar: { label: 'Táxi Dog - Entregar', color: 'bg-purple-500', icon: '🚗' },
+  buscar_entregar: { label: 'Táxi Dog - Buscar e Entregar', color: 'bg-orange-500', icon: '🚗🚗' },
 };
 
 const groomingTypeLabels: Record<string, string> = {
@@ -289,9 +291,22 @@ export default function ServicosDoDia() {
   const KanbanCard = ({ apt }: { apt: Appointment }) => {
     const pet = getPet(apt.pet_id);
     const client = getClient(apt.client_id);
-    const logistics = LOGISTICS_LABELS[pet?.logistics_type || 'tutor_tutor'] || LOGISTICS_LABELS.tutor_tutor;
     const isCompleted = (apt.kanban_status || 'espera') === 'concluido';
     const isPaid = apt.payment_status === 'pago' || apt.payment_status === 'isento';
+    
+    // Get logistics based on rota_buscar and rota_entregar flags
+    const getLogistics = () => {
+      const buscar = apt.rota_buscar;
+      const entregar = apt.rota_entregar;
+      
+      if (buscar && entregar) return LOGISTICS_LABELS.buscar_entregar;
+      if (buscar) return LOGISTICS_LABELS.buscar;
+      if (entregar) return LOGISTICS_LABELS.entregar;
+      return LOGISTICS_LABELS.tutor;
+    };
+    
+    const logistics = getLogistics();
+    const isTaxiDog = apt.rota_buscar || apt.rota_entregar;
     
     // Get grooming type label
     const getGroomingLabel = () => {
@@ -302,12 +317,12 @@ export default function ServicosDoDia() {
       return 'Banho + Tosa';
     };
 
-    // Get selected addons from optional_services
+    // Get selected addons from optional_services (excluding Táxi Dog as it's shown separately)
     const getSelectedAddons = () => {
       if (!apt.optional_services || apt.optional_services.length === 0) return [];
       return apt.optional_services
         .map(addonId => addons.find(a => a.id === addonId))
-        .filter(Boolean) as ServiceAddon[];
+        .filter(addon => addon && !addon.name.toLowerCase().includes('táxi')) as ServiceAddon[];
     };
 
     const selectedAddons = getSelectedAddons();
@@ -397,14 +412,26 @@ export default function ServicosDoDia() {
               </div>
             )}
             
-            {/* Logistics badge */}
-            <div className="mt-2 flex items-center justify-between">
-              <span className={cn(
-                "text-xs px-2 py-0.5 rounded-full text-white",
-                logistics.color
-              )}>
-                {logistics.label}
-              </span>
+            {/* Arrival / Logistics Info */}
+            <div className="mt-2 p-1.5 bg-slate-50 dark:bg-slate-800/50 rounded border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-muted-foreground font-medium">Chegada:</span>
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded text-white font-medium",
+                  logistics.color
+                )}>
+                  {logistics.icon} {isTaxiDog ? 'Táxi Dog' : 'Tutor'}
+                </span>
+              </div>
+              {isTaxiDog && (
+                <div className="text-[10px] text-muted-foreground mt-0.5 pl-0.5">
+                  {apt.rota_buscar && apt.rota_entregar ? 'Buscar + Entregar' : apt.rota_buscar ? 'Buscar' : 'Entregar'}
+                </div>
+              )}
+            </div>
+            
+            {/* Payment actions */}
+            <div className="mt-2 flex items-center justify-end">
               {isCompleted && !isPaid && (
                 <Badge className="bg-green-600 hover:bg-green-700 text-xs animate-pulse">
                   💳 Cobrar
