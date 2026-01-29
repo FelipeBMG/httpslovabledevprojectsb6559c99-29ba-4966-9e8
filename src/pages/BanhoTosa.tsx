@@ -604,7 +604,38 @@ const BanhoTosa = () => {
     // Disparar webhook após salvar no banco
     const pet = pets.find(p => p.id === formData.petId);
     const client = clients.find(c => c.id === formData.clientId);
-    const serviceLabel = formData.service === 'banho' ? 'Banho' : 'Tosa';
+    const serviceLabel = formData.service === 'banho' ? 'Banho' : 'Banho + Tosa';
+    
+    // Map logistics option to readable label
+    const logisticsLabels: Record<string, string> = {
+      'tutor_tutor': 'Tutor leva e traz',
+      'tutor_traxidog': 'Tutor leva / TraxiDog entrega',
+      'traxidog_tutor': 'TraxiDog busca / Tutor busca',
+      'traxidog_traxidog': 'TraxiDog leva e traz',
+    };
+    
+    // Map size to readable label
+    const sizeLabels: Record<string, string> = {
+      'pequeno': 'Pequeno',
+      'medio': 'Médio',
+      'grande': 'Grande',
+    };
+    
+    // Map coat type to readable label
+    const coatLabels: Record<string, string> = {
+      'curto': 'Curto',
+      'medio': 'Médio',
+      'longo': 'Longo',
+    };
+    
+    // Get grooming type label
+    const groomingLabel = GROOMING_TYPES.find(g => g.value === formData.groomingType)?.label || '';
+    
+    // Format additional services as comma-separated string
+    const additionalServicesString = formData.selectedAddons
+      .map(addonId => serviceAddons.find(a => a.id === addonId)?.name)
+      .filter(Boolean)
+      .join(', ');
 
     const webhookResponse = await sendCreateWebhook({
       action: 'create',
@@ -613,6 +644,13 @@ const BanhoTosa = () => {
       start_date: startDate.toISOString(),
       end_date: endDate.toISOString(),
       client_name: client?.name || '',
+      pet_size: sizeLabels[formData.size] || formData.size,
+      hair_type: coatLabels[formData.coatType] || formData.coatType,
+      transport_logistics: logisticsLabels[formData.responsavel] || formData.responsavel,
+      additional_services: additionalServicesString || undefined,
+      observations: formData.notes || undefined,
+      grooming_type: groomingLabel || undefined,
+      price: calculatedPrice || undefined,
     });
 
     // Save google_event_id if received from webhook

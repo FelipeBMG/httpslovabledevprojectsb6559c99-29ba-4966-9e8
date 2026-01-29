@@ -438,6 +438,13 @@ const HotelCreche = () => {
     const client = clients.find(c => c.id === formData.clientId);
     const serviceLabel = formData.serviceType === 'creche' ? 'Creche' : 'Hotel';
     const planMessage = isPlanUsage ? ' (PLANO)' : '';
+    
+    // Map size to readable label
+    const sizeLabels: Record<string, string> = {
+      'pequeno': 'Pequeno',
+      'medio': 'Médio',
+      'grande': 'Grande',
+    };
 
     const webhookResponse = await sendCreateWebhook({
       action: 'create',
@@ -446,6 +453,9 @@ const HotelCreche = () => {
       start_date: checkInDate.toISOString(),
       end_date: checkOutDate.toISOString(),
       client_name: client?.name || '',
+      pet_size: sizeLabels[pet?.size || ''] || pet?.size || undefined,
+      observations: isPlanUsage ? `Uso de plano - ${totalDays} diária(s)` : undefined,
+      price: isPlanUsage ? 0 : totalPrice,
     });
 
     // Save google_event_id if received from webhook

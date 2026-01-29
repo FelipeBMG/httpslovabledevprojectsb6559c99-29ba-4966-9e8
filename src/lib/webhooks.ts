@@ -9,6 +9,14 @@ export interface CreateWebhookPayload {
   start_date: string;
   end_date: string;
   client_name: string;
+  // Extended fields for detailed event description
+  pet_size?: string;
+  hair_type?: string;
+  transport_logistics?: string;
+  additional_services?: string;
+  observations?: string;
+  grooming_type?: string;
+  price?: number;
 }
 
 export interface UpdateWebhookPayload {
@@ -19,6 +27,14 @@ export interface UpdateWebhookPayload {
   start_date: string;
   end_date: string;
   client_name: string;
+  // Extended fields
+  pet_size?: string;
+  hair_type?: string;
+  transport_logistics?: string;
+  additional_services?: string;
+  observations?: string;
+  grooming_type?: string;
+  price?: number;
 }
 
 export interface DeleteWebhookPayload {
@@ -35,6 +51,8 @@ export interface WebhookResponse {
 // Send CREATE webhook and return the google_id from response
 export const sendCreateWebhook = async (payload: CreateWebhookPayload): Promise<WebhookResponse> => {
   try {
+    console.log('Sending CREATE webhook with payload:', payload);
+    
     const response = await fetch(`${WEBHOOK_BASE_URL}/create`, {
       method: 'POST',
       headers: {
