@@ -10,6 +10,8 @@ interface SyncPayload {
   status?: string;
   start_date?: string;
   end_date?: string;
+  summary?: string;
+  description?: string;
 }
 
 Deno.serve(async (req) => {
@@ -29,7 +31,7 @@ Deno.serve(async (req) => {
     const payload: SyncPayload = await req.json();
     console.log('Received sync payload:', payload);
 
-    const { event_id, status, start_date, end_date } = payload;
+    const { event_id, status, start_date, end_date, summary, description } = payload;
 
     if (!event_id) {
       return new Response(
@@ -45,6 +47,7 @@ Deno.serve(async (req) => {
 
     let found = false;
     let updatedTable = '';
+    let actionTaken = '';
 
     // Check if event is cancelled
     const isCancelled = status?.toLowerCase() === 'cancelled' || status?.toLowerCase() === 'canceled';
@@ -71,6 +74,7 @@ Deno.serve(async (req) => {
       if (isCancelled) {
         updateData.status = 'cancelado';
         updateData.kanban_status = 'cancelado';
+        actionTaken = 'cancelled';
       } else {
         // Update dates if provided
         if (start_date) {
@@ -79,6 +83,11 @@ Deno.serve(async (req) => {
         if (end_date) {
           updateData.end_datetime = end_date;
         }
+        // Update notes from description if provided
+        if (description) {
+          updateData.notes = description;
+        }
+        actionTaken = 'updated';
       }
 
       const { error: updateError } = await supabase
@@ -119,6 +128,7 @@ Deno.serve(async (req) => {
 
         if (isCancelled) {
           updateData.status = 'cancelado';
+          actionTaken = 'cancelled';
         } else {
           // Update dates if provided
           if (start_date) {
@@ -127,6 +137,11 @@ Deno.serve(async (req) => {
           if (end_date) {
             updateData.check_out = end_date;
           }
+          // Update notes from description if provided
+          if (description) {
+            updateData.notes = description;
+          }
+          actionTaken = 'updated';
         }
 
         const { error: updateError } = await supabase
@@ -146,12 +161,156 @@ Deno.serve(async (req) => {
       }
     }
 
+    // If not found in either table, try to create a new appointment
+    if (!found && !isCancelled) {
+      console.log('Event not found, attempting to create new appointment...');
+
+      // Extract pet name from summary (e.g., "Banho - Rex" or just "Rex")
+      const petName = summary?.replace(/^(Banho|Tosa|Hotel|Creche)\s*[-–]\s*/i, '').trim();
+
+      if (!petName) {
+        console.log('No pet name found in summary');
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Cannot create appointment: no pet name in summary',
+            event_id 
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Try to find a pet by name (case-insensitive)
+      const { data: pets, error: petsError } = await supabase
+        .from('pets')
+        .select('id, client_id, name, size, coat_type')
+        .ilike('name', petName);
+
+      if (petsError) {
+        console.error('Error searching pets:', petsError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to search pets', details: petsError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!pets || pets.length === 0) {
+        console.log(`No pet found with name: ${petName}`);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: `Pet not found: ${petName}`,
+            event_id 
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Use the first matching pet
+      const pet = pets[0];
+      console.log(`Found pet: ${pet.name} (id: ${pet.id})`);
+
+      // Determine service type from summary
+      const summaryLower = summary?.toLowerCase() || '';
+      const isHotel = summaryLower.includes('hotel') || summaryLower.includes('creche');
+      const isTosa = summaryLower.includes('tosa');
+      const isBanho = summaryLower.includes('banho');
+
+      // Parse dates
+      const startDateTime = start_date ? new Date(start_date) : new Date();
+      const endDateTime = end_date ? new Date(end_date) : new Date(startDateTime.getTime() + 60 * 60 * 1000);
+
+      if (isHotel) {
+        // Create hotel stay
+        const { data: newStay, error: createError } = await supabase
+          .from('hotel_stays')
+          .insert({
+            client_id: pet.client_id,
+            pet_id: pet.id,
+            google_event_id: event_id,
+            check_in: startDateTime.toISOString(),
+            check_out: endDateTime.toISOString(),
+            daily_rate: 0, // Will need to be set manually
+            total_price: 0,
+            status: 'reservado',
+            is_creche: summaryLower.includes('creche'),
+            notes: description || `Criado via Google Calendar: ${summary}`,
+            payment_status: 'pendente',
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating hotel stay:', createError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to create hotel stay', details: createError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Created new hotel stay:', newStay.id);
+        found = true;
+        updatedTable = 'hotel_stays';
+        actionTaken = 'created';
+      } else {
+        // Create bath/grooming appointment
+        let serviceType = 'banho';
+        if (isTosa && isBanho) {
+          serviceType = 'banho_e_tosa';
+        } else if (isTosa) {
+          serviceType = 'tosa';
+        }
+
+        const { data: newAppointment, error: createError } = await supabase
+          .from('bath_grooming_appointments')
+          .insert({
+            client_id: pet.client_id,
+            pet_id: pet.id,
+            google_event_id: event_id,
+            start_datetime: startDateTime.toISOString(),
+            end_datetime: endDateTime.toISOString(),
+            service_type: serviceType,
+            status: 'agendado',
+            kanban_status: 'espera',
+            notes: description || `Criado via Google Calendar: ${summary}`,
+            payment_status: 'pendente',
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating appointment:', createError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to create appointment', details: createError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Created new appointment:', newAppointment.id);
+        found = true;
+        updatedTable = 'bath_grooming_appointments';
+        actionTaken = 'created';
+      }
+    }
+
+    if (!found && isCancelled) {
+      console.log(`Event ${event_id} not found, but status is cancelled - nothing to do`);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Event not found but already cancelled - no action needed',
+          event_id 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (!found) {
       console.log(`No record found for event_id: ${event_id}`);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'Event not found in any table',
+          message: 'Event not found in any table and could not be created',
           event_id 
         }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -161,7 +320,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: isCancelled ? 'Appointment cancelled' : 'Appointment updated',
+        message: `Appointment ${actionTaken}`,
+        action: actionTaken,
         table: updatedTable,
         event_id 
       }),
