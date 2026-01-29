@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { sendCreateWebhook } from '@/lib/webhooks';
+import { sendCreateWebhook, sendUpdateWebhook, sendDeleteWebhook } from '@/lib/webhooks';
 
 type AppointmentStatus = 'agendado' | 'em_atendimento' | 'pronto' | 'finalizado' | 'cancelado';
 
@@ -51,6 +51,7 @@ interface AppointmentDB {
   optional_services: string[] | null;
   is_plan_usage?: boolean | null;
   client_plan_id?: string | null;
+  google_event_id?: string | null;
 }
 
 interface ServicePrice {
@@ -477,6 +478,14 @@ const BanhoTosa = () => {
       return;
     }
 
+    // Send delete webhook to n8n if google_event_id exists
+    if (selectedAppointment.google_event_id) {
+      await sendDeleteWebhook({
+        action: 'delete',
+        google_event_id: selectedAppointment.google_event_id,
+      });
+    }
+
     setAppointments(prev => 
       prev.map(apt => 
         apt.id === selectedAppointment.id ? { ...apt, status: 'cancelado' } : apt
@@ -597,7 +606,7 @@ const BanhoTosa = () => {
     const client = clients.find(c => c.id === formData.clientId);
     const serviceLabel = formData.service === 'banho' ? 'Banho' : 'Tosa';
 
-    await sendCreateWebhook({
+    const webhookResponse = await sendCreateWebhook({
       action: 'create',
       pet_name: pet?.name || '',
       service: serviceLabel,
@@ -605,6 +614,14 @@ const BanhoTosa = () => {
       end_date: endDate.toISOString(),
       client_name: client?.name || '',
     });
+
+    // Save google_event_id if received from webhook
+    if (webhookResponse.google_id && data && data[0]) {
+      await supabase
+        .from('bath_grooming_appointments')
+        .update({ google_event_id: webhookResponse.google_id })
+        .eq('id', data[0].id);
+    }
 
     toast({
       title: "Agendamento criado!",

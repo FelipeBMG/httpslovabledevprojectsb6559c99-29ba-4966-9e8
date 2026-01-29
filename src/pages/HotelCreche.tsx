@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { format, isToday, isPast } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { sendCreateWebhook } from '@/lib/webhooks';
+import { sendCreateWebhook, sendUpdateWebhook, sendDeleteWebhook } from '@/lib/webhooks';
 
 type HotelStatus = 'reservado' | 'check_in' | 'hospedado' | 'check_out' | 'cancelado';
 
@@ -49,6 +49,7 @@ interface HotelStayDB {
   is_creche: boolean | null;
   is_plan_usage?: boolean | null;
   client_plan_id?: string | null;
+  google_event_id?: string | null;
 }
 
 interface HotelRate {
@@ -316,6 +317,14 @@ const HotelCreche = () => {
       return;
     }
 
+    // Send delete webhook to n8n if google_event_id exists
+    if (selectedBooking.google_event_id) {
+      await sendDeleteWebhook({
+        action: 'delete',
+        google_event_id: selectedBooking.google_event_id,
+      });
+    }
+
     // Se era uso de plano, devolver o uso
     if (selectedBooking.is_plan_usage && selectedBooking.client_plan_id) {
       // Buscar plano e reverter uso
@@ -430,7 +439,7 @@ const HotelCreche = () => {
     const serviceLabel = formData.serviceType === 'creche' ? 'Creche' : 'Hotel';
     const planMessage = isPlanUsage ? ' (PLANO)' : '';
 
-    await sendCreateWebhook({
+    const webhookResponse = await sendCreateWebhook({
       action: 'create',
       pet_name: pet?.name || '',
       service: serviceLabel,
@@ -438,6 +447,14 @@ const HotelCreche = () => {
       end_date: checkOutDate.toISOString(),
       client_name: client?.name || '',
     });
+
+    // Save google_event_id if received from webhook
+    if (webhookResponse.google_id && data && data[0]) {
+      await supabase
+        .from('hotel_stays')
+        .update({ google_event_id: webhookResponse.google_id })
+        .eq('id', data[0].id);
+    }
 
     toast({
       title: `✅ ${serviceLabel} reservado!${planMessage}`,
