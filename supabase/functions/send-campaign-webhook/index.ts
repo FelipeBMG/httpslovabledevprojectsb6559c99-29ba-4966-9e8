@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const WEBHOOK_URL = "https://petzap-n8n.slfjaq.easypanel.host/webhook-test/inativos";
+const WEBHOOK_URL = "https://petzap-n8n.slfjaq.easypanel.host/webhook/inativos";
 
 serve(async (req) => {
   // Handle CORS preflight requests
